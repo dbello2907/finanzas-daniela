@@ -7,6 +7,7 @@ import Entries   from './pages/Entries'
 import Installments from './pages/Installments'
 import Savings   from './pages/Savings'
 import Config    from './pages/Config'
+import Help      from './pages/Help'
 
 export default function App() {
   const { user, loading } = useAuth()
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/cuotas"       element={<Installments />} />
         <Route path="/ahorro"       element={<Savings />} />
         <Route path="/config"       element={<Config />} />
+        <Route path="/ayuda"        element={<Help />} />
         <Route path="*"             element={<Navigate to="/" replace />} />
       </Routes>
     </AppShell>

@@ -38,7 +38,9 @@ export default function Config() {
           <i className="ti ti-chevron-left" style={{ fontSize: 20, color: 'var(--text2)' }} />
         </button>
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>Configuración</span>
-        <span />
+        <button onClick={() => navigate('/ayuda')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <i className="ti ti-help-circle" style={{ fontSize: 20, color: 'var(--text2)' }} />
+        </button>
       </div>
 
       {/* Perfil */}
