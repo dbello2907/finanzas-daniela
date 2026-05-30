@@ -468,7 +468,7 @@ body {
 
 /* Modal / Sheet */
 .sheet-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   background: rgba(46, 36, 22, 0.45);
   z-index: 150;
