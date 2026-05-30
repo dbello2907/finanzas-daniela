@@ -51,6 +51,7 @@ export default function EntryForm({ onClose, entry = null }) {
     setSaving(true)
     setError('')
 
+    try {
     if (isEdit) {
       if (isTransferEntry && entry.transfer_pair) {
         // Update both sides of the transfer pair
@@ -100,7 +101,9 @@ export default function EntryForm({ onClose, entry = null }) {
       }
     }
 
-    setSaving(false)
+    } finally {
+      setSaving(false)
+    }
     onClose()
     if (!isEdit) navigate('/asientos')
   }

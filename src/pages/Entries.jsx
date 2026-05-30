@@ -27,8 +27,9 @@ export default function Entries() {
 
   async function loadEntries() {
     setLoading(true)
-    const from = `${anio}-${String(mes).padStart(2,'0')}-01`
-    const to   = `${anio}-${String(mes).padStart(2,'0')}-31`
+    const from    = `${anio}-${String(mes).padStart(2,'0')}-01`
+    const lastDay = new Date(anio, mes, 0).getDate()
+    const to      = `${anio}-${String(mes).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`
 
     let query = supabase
       .from('entries')

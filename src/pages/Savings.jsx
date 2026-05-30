@@ -181,31 +181,33 @@ function AbonarForm({ goal, userId, onClose }) {
   useEffect(() => {
     supabase.from('accounts').select('id,nombre').eq('user_id', userId).eq('activa', true)
       .then(({ data }) => setAccounts(data || []))
-  }, [])
+  }, [userId])
 
   async function handleSave() {
     if (!monto || Number(monto) <= 0) return
     setSaving(true)
-    const nuevo = Number(goal.acumulado) + Number(monto)
-    await supabase.from('savings_goals').update({
-      acumulado: nuevo,
-      completada: nuevo >= Number(goal.meta)
-    }).eq('id', goal.id)
+    try {
+      const nuevo = Number(goal.acumulado) + Number(monto)
+      await supabase.from('savings_goals').update({
+        acumulado: nuevo,
+        completada: nuevo >= Number(goal.meta)
+      }).eq('id', goal.id)
 
-    if (accountId) {
-      await supabase.from('entries').insert({
-        user_id: userId,
-        account_id: accountId,
-        tipo: 'gasto',
-        monto: Number(monto),
-        fecha: todayISO(),
-        descripcion: `Ahorro: ${goal.nombre}`,
-        es_fijo: false,
-        tags: ['ahorro'],
-      })
+      if (accountId) {
+        await supabase.from('entries').insert({
+          user_id: userId,
+          account_id: accountId,
+          tipo: 'gasto',
+          monto: Number(monto),
+          fecha: todayISO(),
+          descripcion: `Ahorro: ${goal.nombre}`,
+          es_fijo: false,
+          tags: ['ahorro'],
+        })
+      }
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
     onClose()
   }
 

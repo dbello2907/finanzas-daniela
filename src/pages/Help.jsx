@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCurrentTime } from '../hooks/useCurrentTime'
 
 const SECTIONS = [
   {
@@ -194,7 +193,6 @@ function AccordionSection({ section }) {
 
 export default function Help() {
   const navigate = useNavigate()
-  const time     = useCurrentTime()
 
   return (
     <>

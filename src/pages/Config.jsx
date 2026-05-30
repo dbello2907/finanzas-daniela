@@ -2,13 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { useCurrentTime } from '../hooks/useCurrentTime'
 import { formatCLP, currentPeriod, formatMonthYear } from '../lib/format'
 
 export default function Config() {
   const { user, profile, signOut } = useAuth()
   const navigate                   = useNavigate()
-  const time                       = useCurrentTime()
   const { anio, mes }              = currentPeriod()
   const [accounts,   setAccounts]   = useState([])
   const [categories, setCategories] = useState([])

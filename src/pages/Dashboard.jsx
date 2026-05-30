@@ -6,7 +6,7 @@ import { useCurrentTime } from '../hooks/useCurrentTime'
 import { formatCLP, formatMonthYear, currentPeriod, progressPct, budgetColor, prevMonth, nextMonth } from '../lib/format'
 
 export default function Dashboard() {
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const navigate          = useNavigate()
   const time              = useCurrentTime()
 
@@ -66,8 +66,9 @@ export default function Dashboard() {
       .order('nombre')
     if (!cats) return
 
-    const from = `${anio}-${String(mes).padStart(2,'0')}-01`
-    const to   = `${anio}-${String(mes).padStart(2,'0')}-31`
+    const from    = `${anio}-${String(mes).padStart(2,'0')}-01`
+    const lastDay = new Date(anio, mes, 0).getDate()
+    const to      = `${anio}-${String(mes).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`
 
     const { data: entries } = await supabase
       .from('entries')
