@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import { formatCLP, formatMonthYear, currentPeriod, progressPct, budgetColor } from '../lib/format'
@@ -6,6 +7,7 @@ import { formatCLP, formatMonthYear, currentPeriod, progressPct, budgetColor } f
 export default function Dashboard() {
   const { user, profile } = useAuth()
   const { anio, mes }     = currentPeriod()
+  const navigate          = useNavigate()
 
   const [summary,    setSummary]    = useState(null)
   const [accounts,   setAccounts]   = useState([])
@@ -95,7 +97,9 @@ export default function Dashboard() {
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>
           {formatMonthYear(anio, mes)}
         </span>
-        <i className="ti ti-bell" style={{ fontSize: 18 }} />
+        <button onClick={() => navigate('/config')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <i className="ti ti-settings" style={{ fontSize: 20, color: 'var(--text2)' }} />
+        </button>
       </div>
 
       {/* Hero */}
@@ -146,7 +150,10 @@ export default function Dashboard() {
       {accounts.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-wallet" />
-          <p>Aún no tienes cuentas. Ve a Configuración para agregar una.</p>
+          <p>Aún no tienes cuentas.</p>
+          <button className="btn btn--ghost" style={{ fontSize: 13, marginTop: 8 }} onClick={() => navigate('/config')}>
+            <i className="ti ti-settings" style={{ fontSize: 14 }} /> Ir a Configuración
+          </button>
         </div>
       ) : (
         accounts.map((acc, i) => (
