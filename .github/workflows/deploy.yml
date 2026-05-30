@@ -13,7 +13,8 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npx vite build
+      - run: chmod +x node_modules/.bin/vite
+      - run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
