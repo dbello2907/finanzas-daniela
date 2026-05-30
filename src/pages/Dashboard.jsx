@@ -2,22 +2,31 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { formatCLP, formatMonthYear, currentPeriod, progressPct, budgetColor } from '../lib/format'
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { formatCLP, formatMonthYear, currentPeriod, progressPct, budgetColor, prevMonth, nextMonth } from '../lib/format'
 
 export default function Dashboard() {
   const { user, profile } = useAuth()
-  const { anio, mes }     = currentPeriod()
   const navigate          = useNavigate()
+  const time              = useCurrentTime()
 
-  const [summary,    setSummary]    = useState(null)
-  const [accounts,   setAccounts]   = useState([])
-  const [categories, setCategories] = useState([])
-  const [spent,      setSpent]      = useState({}) // gasto por categoría este mes
-  const [loading,    setLoading]    = useState(true)
+  const { anio: todayAnio, mes: todayMes } = currentPeriod()
+  const [anio,        setAnio]        = useState(todayAnio)
+  const [mes,         setMes]         = useState(todayMes)
+  const [summary,     setSummary]     = useState(null)
+  const [accounts,    setAccounts]    = useState([])
+  const [categories,  setCategories]  = useState([])
+  const [spent,       setSpent]       = useState({})
+  const [loading,     setLoading]     = useState(true)
+
+  const isCurrentMonth = anio === todayAnio && mes === todayMes
+
+  function goPrev() { const p = prevMonth(anio, mes); setAnio(p.anio); setMes(p.mes) }
+  function goNext() { const p = nextMonth(anio, mes); setAnio(p.anio); setMes(p.mes) }
 
   useEffect(() => {
     if (user) loadDashboard()
-  }, [user])
+  }, [user, anio, mes])
 
   async function loadDashboard() {
     setLoading(true)
@@ -30,6 +39,7 @@ export default function Dashboard() {
       p_user_id: user.id, p_anio: anio, p_mes: mes
     })
     if (data?.[0]) setSummary(data[0])
+    else setSummary(null)
   }
 
   async function loadAccounts() {
@@ -40,7 +50,6 @@ export default function Dashboard() {
       .eq('activa', true)
       .order('created_at')
     if (data) {
-      // calcular saldo real por cuenta
       const withBalance = await Promise.all(data.map(async (acc) => {
         const { data: bal } = await supabase.rpc('get_account_balance', { p_account_id: acc.id })
         return { ...acc, saldo_real: bal ?? acc.saldo_inicial }
@@ -91,12 +100,23 @@ export default function Dashboard() {
 
   return (
     <>
-      {/* Status bar */}
+      {/* Status bar con navegación de meses */}
       <div className="status-bar">
-        <span>9:41</span>
-        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-          {formatMonthYear(anio, mes)}
-        </span>
+        <span>{time}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button onClick={goPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>
+            <i className="ti ti-chevron-left" style={{ fontSize: 14, color: 'var(--text2)' }} />
+          </button>
+          <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: 13 }}>
+            {formatMonthYear(anio, mes)}
+          </span>
+          <button onClick={goNext} disabled={isCurrentMonth}
+            style={{ background: 'none', border: 'none', padding: '0 4px', lineHeight: 1,
+              cursor: isCurrentMonth ? 'default' : 'pointer',
+              opacity: isCurrentMonth ? 0.25 : 1 }}>
+            <i className="ti ti-chevron-right" style={{ fontSize: 14, color: 'var(--text2)' }} />
+          </button>
+        </div>
         <button onClick={() => navigate('/config')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
           <i className="ti ti-settings" style={{ fontSize: 20, color: 'var(--text2)' }} />
         </button>

@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { formatCLP, formatDateLong, progressPct } from '../lib/format'
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { formatCLP, formatDateLong, progressPct, todayISO } from '../lib/format'
 
 export default function Savings() {
-  const { user }   = useAuth()
-  const [goals,    setGoals]    = useState([])
-  const [loading,  setLoading]  = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  const { user }      = useAuth()
+  const navigate      = useNavigate()
+  const time          = useCurrentTime()
+  const [goals,       setGoals]       = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [showForm,    setShowForm]    = useState(false)
+  const [abonarGoal,  setAbonarGoal]  = useState(null)
 
   useEffect(() => { if (user) load() }, [user])
 
@@ -28,7 +33,9 @@ export default function Savings() {
   return (
     <>
       <div className="status-bar">
-        <span>9:41</span>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <i className="ti ti-chevron-left" style={{ fontSize: 20, color: 'var(--text2)' }} />
+        </button>
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>Ahorro</span>
         <button style={{ background: 'none', border: 'none', cursor: 'pointer' }}
           onClick={() => setShowForm(true)}>
@@ -67,29 +74,32 @@ export default function Savings() {
       ) : (
         <>
           <p className="section-label">Mis metas</p>
-          {goals.map(goal => <GoalCard key={goal.id} goal={goal} onRefresh={load} />)}
+          {goals.map(goal => (
+            <GoalCard
+              key={goal.id}
+              goal={goal}
+              onRefresh={load}
+              onAbonar={() => setAbonarGoal(goal)}
+            />
+          ))}
         </>
       )}
 
       {showForm && <GoalForm onClose={() => { setShowForm(false); load() }} userId={user.id} />}
+      {abonarGoal && (
+        <AbonarForm
+          goal={abonarGoal}
+          userId={user.id}
+          onClose={() => { setAbonarGoal(null); load() }}
+        />
+      )}
     </>
   )
 }
 
-function GoalCard({ goal, onRefresh }) {
+function GoalCard({ goal, onRefresh, onAbonar }) {
   const pct      = progressPct(goal.acumulado, goal.meta)
   const restante = Number(goal.meta) - Number(goal.acumulado)
-
-  async function handleAbonar() {
-    const monto = prompt('¿Cuánto abonas a esta meta?')
-    if (!monto || isNaN(Number(monto)) || Number(monto) <= 0) return
-    const nuevo = Number(goal.acumulado) + Number(monto)
-    await supabase.from('savings_goals').update({
-      acumulado: nuevo,
-      completada: nuevo >= Number(goal.meta)
-    }).eq('id', goal.id)
-    onRefresh()
-  }
 
   async function handleDelete() {
     if (!confirm('¿Eliminar esta meta?')) return
@@ -153,10 +163,90 @@ function GoalCard({ goal, onRefresh }) {
         </div>
         {!goal.completada && (
           <button className="btn btn--ghost" style={{ width: '100%', marginTop: 10, fontSize: 13 }}
-            onClick={handleAbonar}>
+            onClick={onAbonar}>
             <i className="ti ti-plus" style={{ fontSize: 16 }} /> Abonar
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+function AbonarForm({ goal, userId, onClose }) {
+  const [monto,     setMonto]     = useState('')
+  const [accountId, setAccountId] = useState(goal.account_id || '')
+  const [accounts,  setAccounts]  = useState([])
+  const [saving,    setSaving]    = useState(false)
+
+  useEffect(() => {
+    supabase.from('accounts').select('id,nombre').eq('user_id', userId).eq('activa', true)
+      .then(({ data }) => setAccounts(data || []))
+  }, [])
+
+  async function handleSave() {
+    if (!monto || Number(monto) <= 0) return
+    setSaving(true)
+    const nuevo = Number(goal.acumulado) + Number(monto)
+    await supabase.from('savings_goals').update({
+      acumulado: nuevo,
+      completada: nuevo >= Number(goal.meta)
+    }).eq('id', goal.id)
+
+    if (accountId) {
+      await supabase.from('entries').insert({
+        user_id: userId,
+        account_id: accountId,
+        tipo: 'gasto',
+        monto: Number(monto),
+        fecha: todayISO(),
+        descripcion: `Ahorro: ${goal.nombre}`,
+        es_fijo: false,
+        tags: ['ahorro'],
+      })
+    }
+
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div className="sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="sheet">
+        <div className="sheet__handle" />
+        <div className="sheet__header">
+          <span className="sheet__title">Abonar a "{goal.nombre}"</span>
+          <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={onClose}>
+            <i className="ti ti-x" style={{ fontSize: 20, color: 'var(--text2)' }} />
+          </button>
+        </div>
+        <div className="sheet__body">
+          <input
+            className="amount-display"
+            type="number"
+            inputMode="numeric"
+            placeholder="$0"
+            value={monto}
+            onChange={e => setMonto(e.target.value)}
+          />
+          <div className="form-group">
+            <label className="form-label">Descontar de cuenta (opcional)</label>
+            <select className="form-select" value={accountId} onChange={e => setAccountId(e.target.value)}>
+              <option value="">Solo actualizar meta</option>
+              {accounts.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+          </div>
+          {accountId && (
+            <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14, marginTop: -8 }}>
+              Se creará un asiento de gasto en la cuenta seleccionada.
+            </p>
+          )}
+          <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
+            {saving
+              ? <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+              : 'Abonar'
+            }
+          </button>
+        </div>
       </div>
     </div>
   )

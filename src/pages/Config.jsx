@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { formatCLP, currentPeriod, formatMonthYear } from '../lib/format'
 
 export default function Config() {
   const { user, profile, signOut } = useAuth()
-  const { anio, mes } = currentPeriod()
+  const navigate                   = useNavigate()
+  const time                       = useCurrentTime()
+  const { anio, mes }              = currentPeriod()
   const [accounts,   setAccounts]   = useState([])
   const [categories, setCategories] = useState([])
   const [period,     setPeriod]     = useState(null)
-  const [section,    setSection]    = useState('cuentas') // cuentas | partidas | mes
+  const [section,    setSection]    = useState('cuentas')
   const [loading,    setLoading]    = useState(true)
 
   useEffect(() => { if (user) load() }, [user])
@@ -30,7 +34,9 @@ export default function Config() {
   return (
     <>
       <div className="status-bar">
-        <span>9:41</span>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <i className="ti ti-chevron-left" style={{ fontSize: 20, color: 'var(--text2)' }} />
+        </button>
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>Configuración</span>
         <span />
       </div>
@@ -90,13 +96,16 @@ export default function Config() {
 
 /* ---------- Sección Cuentas ---------- */
 function CuentasSection({ accounts, userId, onRefresh }) {
-  const [showForm, setShowForm] = useState(false)
+  const [showForm,   setShowForm]   = useState(false)
+  const [editAccount, setEditAccount] = useState(null)
 
   async function handleDelete(id) {
     if (!confirm('¿Eliminar esta cuenta?')) return
     await supabase.from('accounts').update({ activa: false }).eq('id', id)
     onRefresh()
   }
+
+  const activeAccounts = accounts.filter(a => a.activa)
 
   return (
     <div style={{ paddingBottom: 16 }}>
@@ -107,23 +116,40 @@ function CuentasSection({ accounts, userId, onRefresh }) {
           <i className="ti ti-plus" style={{ fontSize: 14 }} /> Nueva
         </button>
       </div>
-      {accounts.filter(a => a.activa).map(acc => (
-        <div key={acc.id} style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 16px', borderBottom: '1px solid var(--bg)', background: 'var(--white)'
-        }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{acc.nombre}</p>
-            <p style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'capitalize' }}>
-              {acc.tipo} · Saldo inicial: {formatCLP(acc.saldo_inicial)}
-            </p>
-          </div>
-          <button onClick={() => handleDelete(acc.id)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <i className="ti ti-trash" style={{ fontSize: 16, color: 'var(--text3)' }} />
-          </button>
+
+      {activeAccounts.length === 0 ? (
+        <div className="empty-state" style={{ paddingTop: 32 }}>
+          <i className="ti ti-wallet" />
+          <p>Aún no tienes cuentas.<br />Usa "Nueva" para agregar una.</p>
         </div>
-      ))}
-      {showForm && <AccountForm onClose={() => { setShowForm(false); onRefresh() }} userId={userId} />}
+      ) : (
+        activeAccounts.map(acc => (
+          <div key={acc.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 16px', borderBottom: '1px solid var(--bg)', background: 'var(--white)'
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{acc.nombre}</p>
+              <p style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'capitalize' }}>
+                {acc.tipo} · Saldo inicial: {formatCLP(acc.saldo_inicial)}
+              </p>
+            </div>
+            <button onClick={() => setEditAccount(acc)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px' }}>
+              <i className="ti ti-pencil" style={{ fontSize: 15, color: 'var(--text3)' }} />
+            </button>
+            <button onClick={() => handleDelete(acc.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px' }}>
+              <i className="ti ti-trash" style={{ fontSize: 15, color: 'var(--text3)' }} />
+            </button>
+          </div>
+        ))
+      )}
+
+      {showForm && (
+        <AccountForm onClose={() => { setShowForm(false); onRefresh() }} userId={userId} />
+      )}
+      {editAccount && (
+        <AccountForm account={editAccount} onClose={() => { setEditAccount(null); onRefresh() }} userId={userId} />
+      )}
     </div>
   )
 }
@@ -147,24 +173,33 @@ function PartidasSection({ categories, userId, onRefresh }) {
           <i className="ti ti-plus" style={{ fontSize: 14 }} /> Nueva
         </button>
       </div>
-      {categories.map(cat => (
-        <div key={cat.id} style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 16px', borderBottom: '1px solid var(--bg)', background: 'var(--white)'
-        }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{cat.nombre}</p>
-            {cat.presupuesto_mensual && (
-              <p style={{ fontSize: 11, color: 'var(--text2)' }}>
-                Presupuesto: {formatCLP(cat.presupuesto_mensual)}/mes
-              </p>
-            )}
-          </div>
-          <button onClick={() => handleDelete(cat.id)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <i className="ti ti-trash" style={{ fontSize: 16, color: 'var(--text3)' }} />
-          </button>
+
+      {categories.length === 0 ? (
+        <div className="empty-state" style={{ paddingTop: 32 }}>
+          <i className="ti ti-tag" />
+          <p>Aún no tienes partidas.<br />Usa "Nueva" para agregar una.</p>
         </div>
-      ))}
+      ) : (
+        categories.map(cat => (
+          <div key={cat.id} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 16px', borderBottom: '1px solid var(--bg)', background: 'var(--white)'
+          }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{cat.nombre}</p>
+              {cat.presupuesto_mensual && (
+                <p style={{ fontSize: 11, color: 'var(--text2)' }}>
+                  Presupuesto: {formatCLP(cat.presupuesto_mensual)}/mes
+                </p>
+              )}
+            </div>
+            <button onClick={() => handleDelete(cat.id)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <i className="ti ti-trash" style={{ fontSize: 16, color: 'var(--text3)' }} />
+            </button>
+          </div>
+        ))
+      )}
+
       {showForm && <CategoryForm onClose={() => { setShowForm(false); onRefresh() }} userId={userId} />}
     </div>
   )
@@ -212,18 +247,31 @@ function MesSection({ period, userId, anio, mes, onRefresh }) {
   )
 }
 
-/* ---------- Formulario nueva cuenta ---------- */
-function AccountForm({ onClose, userId }) {
-  const [form, setForm] = useState({ nombre: '', tipo: 'corriente', saldo_inicial: '' })
+/* ---------- Formulario cuenta (crear y editar) ---------- */
+function AccountForm({ onClose, userId, account = null }) {
+  const isEdit = !!account
+  const [form, setForm] = useState({
+    nombre: account?.nombre || '',
+    tipo: account?.tipo || 'corriente',
+    saldo_inicial: account?.saldo_inicial ?? ''
+  })
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     if (!form.nombre) return
     setSaving(true)
-    await supabase.from('accounts').insert({
-      user_id: userId, nombre: form.nombre,
-      tipo: form.tipo, saldo_inicial: Number(form.saldo_inicial) || 0
-    })
+    if (isEdit) {
+      await supabase.from('accounts').update({
+        nombre: form.nombre,
+        tipo: form.tipo,
+        saldo_inicial: Number(form.saldo_inicial) || 0
+      }).eq('id', account.id)
+    } else {
+      await supabase.from('accounts').insert({
+        user_id: userId, nombre: form.nombre,
+        tipo: form.tipo, saldo_inicial: Number(form.saldo_inicial) || 0
+      })
+    }
     setSaving(false)
     onClose()
   }
@@ -233,7 +281,7 @@ function AccountForm({ onClose, userId }) {
       <div className="sheet">
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">Nueva cuenta</span>
+          <span className="sheet__title">{isEdit ? 'Editar cuenta' : 'Nueva cuenta'}</span>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={onClose}>
             <i className="ti ti-x" style={{ fontSize: 20, color: 'var(--text2)' }} />
           </button>
@@ -261,7 +309,10 @@ function AccountForm({ onClose, userId }) {
               value={form.saldo_inicial} onChange={e => setForm({...form, saldo_inicial: e.target.value})} />
           </div>
           <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
-            {saving ? <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} /> : 'Agregar cuenta'}
+            {saving
+              ? <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+              : isEdit ? 'Guardar cambios' : 'Agregar cuenta'
+            }
           </button>
         </div>
       </div>

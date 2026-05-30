@@ -1,28 +1,43 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
-import { formatCLP, formatDateShort, groupByDate } from '../lib/format'
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { formatCLP, formatDateShort, groupByDate, currentPeriod, formatMonthYear, prevMonth, nextMonth } from '../lib/format'
 import EntryForm from '../components/ui/EntryForm'
 
 export default function Entries() {
   const { user }        = useAuth()
+  const time            = useCurrentTime()
+
+  const { anio: todayAnio, mes: todayMes } = currentPeriod()
+  const [anio,          setAnio]          = useState(todayAnio)
+  const [mes,           setMes]           = useState(todayMes)
   const [entries,       setEntries]       = useState([])
   const [filter,        setFilter]        = useState('todos')
   const [loading,       setLoading]       = useState(true)
   const [actionEntry,   setActionEntry]   = useState(null)
   const [editEntry,     setEditEntry]     = useState(null)
 
-  useEffect(() => { if (user) loadEntries() }, [user, filter])
+  const isCurrentMonth = anio === todayAnio && mes === todayMes
+
+  function goPrev() { const p = prevMonth(anio, mes); setAnio(p.anio); setMes(p.mes) }
+  function goNext() { const p = nextMonth(anio, mes); setAnio(p.anio); setMes(p.mes) }
+
+  useEffect(() => { if (user) loadEntries() }, [user, filter, anio, mes])
 
   async function loadEntries() {
     setLoading(true)
+    const from = `${anio}-${String(mes).padStart(2,'0')}-01`
+    const to   = `${anio}-${String(mes).padStart(2,'0')}-31`
+
     let query = supabase
       .from('entries')
       .select('*, accounts(nombre), categories(nombre,color)')
       .eq('user_id', user.id)
+      .gte('fecha', from)
+      .lte('fecha', to)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(100)
 
     if (filter !== 'todos') query = query.eq('tipo', filter)
 
@@ -34,7 +49,6 @@ export default function Entries() {
   async function handleDelete(entry) {
     setActionEntry(null)
     if (!confirm('¿Eliminar este asiento?')) return
-
     if (entry.transfer_pair) {
       await supabase.from('entries').delete().eq('transfer_pair', entry.transfer_pair)
     } else {
@@ -48,14 +62,34 @@ export default function Entries() {
   return (
     <>
       <div className="status-bar">
-        <span>9:41</span>
+        <span>{time}</span>
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>Asientos</span>
         <span />
       </div>
 
-      {/* Filtros */}
+      {/* Navegador de mes */}
       <div style={{
-        display: 'flex', gap: 8, padding: '12px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 16px', background: 'var(--white)',
+        borderBottom: '1px solid var(--bg)'
+      }}>
+        <button onClick={goPrev} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px' }}>
+          <i className="ti ti-chevron-left" style={{ fontSize: 16, color: 'var(--text2)' }} />
+        </button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+          {formatMonthYear(anio, mes)}
+        </span>
+        <button onClick={goNext} disabled={isCurrentMonth}
+          style={{ background: 'none', border: 'none', padding: '4px 8px',
+            cursor: isCurrentMonth ? 'default' : 'pointer',
+            opacity: isCurrentMonth ? 0.25 : 1 }}>
+          <i className="ti ti-chevron-right" style={{ fontSize: 16, color: 'var(--text2)' }} />
+        </button>
+      </div>
+
+      {/* Filtros tipo */}
+      <div style={{
+        display: 'flex', gap: 8, padding: '10px 16px',
         background: 'var(--white)',
         borderBottom: '1px solid var(--bg)'
       }}>
@@ -66,6 +100,11 @@ export default function Entries() {
             {f === 'todos' ? 'Todos' : f === 'ingreso' ? 'Ingresos' : 'Gastos'}
           </button>
         ))}
+        {entries.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text3)', alignSelf: 'center' }}>
+            {entries.length} registro{entries.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {loading ? (
@@ -73,7 +112,7 @@ export default function Entries() {
       ) : entries.length === 0 ? (
         <div className="empty-state">
           <i className="ti ti-receipt" />
-          <p>No hay asientos aún.<br />Usa el botón + para agregar uno.</p>
+          <p>No hay asientos en {formatMonthYear(anio, mes)}.<br />Usa el botón + para agregar uno.</p>
         </div>
       ) : (
         grouped.map(([fecha, items]) => (
@@ -141,7 +180,6 @@ export default function Entries() {
         </div>
       )}
 
-      {/* Formulario de edición */}
       {editEntry && (
         <EntryForm
           entry={editEntry}
@@ -153,7 +191,7 @@ export default function Entries() {
 }
 
 function EntryRow({ entry, last, onTap }) {
-  const isIngreso      = entry.tipo === 'ingreso'
+  const isIngreso       = entry.tipo === 'ingreso'
   const isTransferencia = entry.tipo === 'transferencia'
   const dotColor = isIngreso ? 'var(--gg)' : isTransferencia ? 'var(--gm)' : 'var(--ds)'
   const amtColor = isIngreso ? 'var(--gg)' : isTransferencia ? 'var(--text2)' : 'var(--ds)'
@@ -173,10 +211,7 @@ function EntryRow({ entry, last, onTap }) {
       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
       onMouseLeave={e => e.currentTarget.style.background = 'var(--white)'}
     >
-      <div style={{
-        width: 8, height: 8, borderRadius: '50%',
-        background: dotColor, flexShrink: 0
-      }} />
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

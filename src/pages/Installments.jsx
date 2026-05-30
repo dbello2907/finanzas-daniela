@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 import { formatCLP, formatMonthYear, progressPct } from '../lib/format'
 
 export default function Installments() {
   const { user }          = useAuth()
+  const navigate          = useNavigate()
+  const time              = useCurrentTime()
   const [installments,    setInstallments]    = useState([])
   const [forecast,        setForecast]        = useState([])
   const [loading,         setLoading]         = useState(true)
@@ -40,7 +44,9 @@ export default function Installments() {
   return (
     <>
       <div className="status-bar">
-        <span>9:41</span>
+        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <i className="ti ti-chevron-left" style={{ fontSize: 20, color: 'var(--text2)' }} />
+        </button>
         <span style={{ fontWeight: 600, color: 'var(--text)' }}>Cuotas TDC</span>
         <button style={{ background: 'none', border: 'none', cursor: 'pointer' }}
           onClick={() => setShowForm(true)}>
@@ -201,7 +207,6 @@ function InstallmentForm({ onClose, userId }) {
     }).select().single()
 
     if (inst) {
-      // Generar los N asientos futuros automáticamente
       const entries = []
       for (let i = 0; i < Number(form.num_cuotas); i++) {
         const d = new Date(form.fecha_inicio + 'T00:00:00')

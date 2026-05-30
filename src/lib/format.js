@@ -62,3 +62,11 @@ export function budgetColor(pct) {
   if (pct >= 70) return 'var(--gm)'
   return 'var(--gg)'
 }
+
+// Navegar entre meses
+export function prevMonth(anio, mes) {
+  return mes === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mes - 1 }
+}
+export function nextMonth(anio, mes) {
+  return mes === 12 ? { anio: anio + 1, mes: 1 } : { anio, mes: mes + 1 }
+}
