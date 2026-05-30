@@ -4,22 +4,23 @@ import { useAuth } from '../../hooks/useAuth'
 import { todayISO } from '../../lib/format'
 import { useNavigate } from 'react-router-dom'
 
-const TIPOS = ['gasto', 'ingreso', 'transferencia']
-
-export default function EntryForm({ onClose }) {
+export default function EntryForm({ onClose, entry = null }) {
   const { user }         = useAuth()
   const navigate         = useNavigate()
-  const [tipo,           setTipo]           = useState('gasto')
-  const [monto,          setMonto]          = useState('')
-  const [descripcion,    setDescripcion]    = useState('')
-  const [accountId,      setAccountId]      = useState('')
-  const [accountDestId,  setAccountDestId]  = useState('') // para transferencias
-  const [categoryId,     setCategoryId]     = useState('')
-  const [fecha,          setFecha]          = useState(todayISO())
-  const [nota,           setNota]           = useState('')
-  const [tags,           setTags]           = useState([])
+  const isEdit           = !!entry
+  const isTransferEntry  = entry?.tipo === 'transferencia'
+
+  const [tipo,           setTipo]           = useState(entry?.tipo || 'gasto')
+  const [monto,          setMonto]          = useState(entry ? String(entry.monto) : '')
+  const [descripcion,    setDescripcion]    = useState(entry?.descripcion || '')
+  const [accountId,      setAccountId]      = useState(entry?.account_id || '')
+  const [accountDestId,  setAccountDestId]  = useState('')
+  const [categoryId,     setCategoryId]     = useState(entry?.category_id || '')
+  const [fecha,          setFecha]          = useState(entry?.fecha || todayISO())
+  const [nota,           setNota]           = useState(entry?.nota || '')
+  const [tags,           setTags]           = useState(entry?.tags || [])
   const [newTag,         setNewTag]         = useState('')
-  const [esFijo,         setEsFijo]         = useState(false)
+  const [esFijo,         setEsFijo]         = useState(entry?.es_fijo || false)
   const [accounts,       setAccounts]       = useState([])
   const [categories,     setCategories]     = useState([])
   const [saving,         setSaving]         = useState(false)
@@ -27,7 +28,10 @@ export default function EntryForm({ onClose }) {
 
   useEffect(() => {
     supabase.from('accounts').select('id,nombre,tipo').eq('user_id', user.id).eq('activa', true)
-      .then(({ data }) => { setAccounts(data || []); if (data?.length) setAccountId(data[0].id) })
+      .then(({ data }) => {
+        setAccounts(data || [])
+        if (!isEdit && data?.length) setAccountId(data[0].id)
+      })
     supabase.from('categories').select('id,nombre').eq('user_id', user.id).order('nombre')
       .then(({ data }) => setCategories(data || []))
   }, [user])
@@ -40,40 +44,65 @@ export default function EntryForm({ onClose }) {
 
   async function handleSave() {
     if (!monto || Number(monto) <= 0) { setError('Ingresa un monto válido'); return }
-    if (!accountId) { setError('Selecciona una cuenta'); return }
-    if (tipo === 'transferencia' && !accountDestId) { setError('Selecciona cuenta destino'); return }
-    if (tipo === 'transferencia' && accountId === accountDestId) { setError('Las cuentas deben ser distintas'); return }
+    if (!isEdit && !accountId) { setError('Selecciona una cuenta'); return }
+    if (!isEdit && tipo === 'transferencia' && !accountDestId) { setError('Selecciona cuenta destino'); return }
+    if (!isEdit && tipo === 'transferencia' && accountId === accountDestId) { setError('Las cuentas deben ser distintas'); return }
 
     setSaving(true)
     setError('')
 
-    const base = {
-      user_id: user.id,
-      account_id: accountId,
-      category_id: categoryId || null,
-      tipo,
-      monto: Number(monto),
-      fecha,
-      descripcion: descripcion || (tipo === 'ingreso' ? 'Ingreso' : tipo === 'transferencia' ? 'Transferencia' : 'Gasto'),
-      nota: nota || null,
-      tags,
-      es_fijo: esFijo,
-    }
-
-    if (tipo === 'transferencia') {
-      const pairId = crypto.randomUUID()
-      await supabase.from('entries').insert([
-        { ...base, tipo: 'transferencia', transfer_pair: pairId },
-        { ...base, account_id: accountDestId, tipo: 'transferencia', transfer_pair: pairId,
-          descripcion: `${base.descripcion} (recibido)` }
-      ])
+    if (isEdit) {
+      if (isTransferEntry && entry.transfer_pair) {
+        // Update both sides of the transfer pair
+        await supabase.from('entries')
+          .update({ monto: Number(monto), fecha, nota: nota || null, tags })
+          .eq('transfer_pair', entry.transfer_pair)
+        // Update description only for the origin entry
+        await supabase.from('entries')
+          .update({ descripcion: descripcion || 'Transferencia' })
+          .eq('id', entry.id)
+      } else {
+        await supabase.from('entries').update({
+          account_id: accountId,
+          category_id: categoryId || null,
+          tipo,
+          monto: Number(monto),
+          fecha,
+          descripcion: descripcion || (tipo === 'ingreso' ? 'Ingreso' : 'Gasto'),
+          nota: nota || null,
+          tags,
+          es_fijo: esFijo,
+        }).eq('id', entry.id)
+      }
     } else {
-      await supabase.from('entries').insert(base)
+      const base = {
+        user_id: user.id,
+        account_id: accountId,
+        category_id: categoryId || null,
+        tipo,
+        monto: Number(monto),
+        fecha,
+        descripcion: descripcion || (tipo === 'ingreso' ? 'Ingreso' : tipo === 'transferencia' ? 'Transferencia' : 'Gasto'),
+        nota: nota || null,
+        tags,
+        es_fijo: esFijo,
+      }
+
+      if (tipo === 'transferencia') {
+        const pairId = crypto.randomUUID()
+        await supabase.from('entries').insert([
+          { ...base, tipo: 'transferencia', transfer_pair: pairId },
+          { ...base, account_id: accountDestId, tipo: 'transferencia', transfer_pair: pairId,
+            descripcion: `${base.descripcion} (recibido)` }
+        ])
+      } else {
+        await supabase.from('entries').insert(base)
+      }
     }
 
     setSaving(false)
     onClose()
-    navigate('/asientos')
+    if (!isEdit) navigate('/asientos')
   }
 
   const isTransfer = tipo === 'transferencia'
@@ -83,39 +112,54 @@ export default function EntryForm({ onClose }) {
       <div className="sheet">
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">Nuevo asiento</span>
+          <span className="sheet__title">{isEdit ? 'Editar asiento' : 'Nuevo asiento'}</span>
           <button style={{ background: 'none', border: 'none', cursor: 'pointer' }} onClick={onClose}>
             <i className="ti ti-x" style={{ fontSize: 20, color: 'var(--text2)' }} />
           </button>
         </div>
 
         <div className="sheet__body">
-          {/* Tipo */}
-          <div className="type-selector">
-            <button
-              className={`type-btn type-btn--gasto ${tipo === 'gasto' ? 'active' : ''}`}
-              onClick={() => setTipo('gasto')}>
-              <i className="ti ti-arrow-up" /> Gasto
-            </button>
-            <button
-              className={`type-btn type-btn--ingreso ${tipo === 'ingreso' ? 'active' : ''}`}
-              onClick={() => setTipo('ingreso')}>
-              <i className="ti ti-arrow-down" /> Ingreso
-            </button>
-          </div>
+          {/* Tipo (solo en creación, no en edición de transferencia) */}
+          {(!isEdit || !isTransferEntry) && (
+            <>
+              <div className="type-selector">
+                <button
+                  className={`type-btn type-btn--gasto ${tipo === 'gasto' ? 'active' : ''}`}
+                  onClick={() => setTipo('gasto')}>
+                  <i className="ti ti-arrow-up" /> Gasto
+                </button>
+                <button
+                  className={`type-btn type-btn--ingreso ${tipo === 'ingreso' ? 'active' : ''}`}
+                  onClick={() => setTipo('ingreso')}>
+                  <i className="ti ti-arrow-down" /> Ingreso
+                </button>
+              </div>
 
-          <button
-            onClick={() => setTipo('transferencia')}
-            style={{
-              width: '100%', padding: '9px', marginBottom: 16,
-              borderRadius: 'var(--radius-sm)', fontSize: 13, fontWeight: 500,
-              border: `1.5px solid ${tipo === 'transferencia' ? 'var(--gm)' : 'var(--gl)'}`,
-              background: tipo === 'transferencia' ? '#f0f4e8' : 'var(--bg)',
-              color: tipo === 'transferencia' ? 'var(--gg)' : 'var(--text2)',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}>
-            <i className="ti ti-arrows-exchange" /> Transferencia entre cuentas
-          </button>
+              {!isEdit && (
+                <button
+                  onClick={() => setTipo('transferencia')}
+                  style={{
+                    width: '100%', padding: '9px', marginBottom: 16,
+                    borderRadius: 'var(--radius-sm)', fontSize: 13, fontWeight: 500,
+                    border: `1.5px solid ${tipo === 'transferencia' ? 'var(--gm)' : 'var(--gl)'}`,
+                    background: tipo === 'transferencia' ? '#f0f4e8' : 'var(--bg)',
+                    color: tipo === 'transferencia' ? 'var(--gg)' : 'var(--text2)',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                  <i className="ti ti-arrows-exchange" /> Transferencia entre cuentas
+                </button>
+              )}
+            </>
+          )}
+
+          {isEdit && isTransferEntry && (
+            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', marginBottom: 16 }}>
+              <p style={{ fontSize: 12, color: 'var(--text2)' }}>
+                <i className="ti ti-arrows-exchange" style={{ marginRight: 4 }} />
+                Transferencia · puedes editar monto, fecha y nota
+              </p>
+            </div>
+          )}
 
           {/* Monto */}
           <input
@@ -141,17 +185,19 @@ export default function EntryForm({ onClose }) {
               value={fecha} onChange={e => setFecha(e.target.value)} />
           </div>
 
-          {/* Cuenta origen */}
-          <div className="form-group">
-            <label className="form-label">{isTransfer ? 'Cuenta origen' : 'Cuenta'}</label>
-            <select className="form-select" value={accountId}
-              onChange={e => setAccountId(e.target.value)}>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
-            </select>
-          </div>
+          {/* Cuenta origen (no para edición de transferencia) */}
+          {!(isEdit && isTransferEntry) && (
+            <div className="form-group">
+              <label className="form-label">{isTransfer ? 'Cuenta origen' : 'Cuenta'}</label>
+              <select className="form-select" value={accountId}
+                onChange={e => setAccountId(e.target.value)}>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+              </select>
+            </div>
+          )}
 
-          {/* Cuenta destino (solo transferencia) */}
-          {isTransfer && (
+          {/* Cuenta destino (solo nueva transferencia) */}
+          {!isEdit && isTransfer && (
             <div className="form-group">
               <label className="form-label">Cuenta destino</label>
               <select className="form-select" value={accountDestId}
@@ -165,7 +211,7 @@ export default function EntryForm({ onClose }) {
           )}
 
           {/* Partida */}
-          {!isTransfer && (
+          {!isTransfer && !(isEdit && isTransferEntry) && (
             <div className="form-group">
               <label className="form-label">Partida</label>
               <select className="form-select" value={categoryId}
@@ -204,7 +250,7 @@ export default function EntryForm({ onClose }) {
           </div>
 
           {/* ¿Es fijo? */}
-          {!isTransfer && (
+          {!isTransfer && !(isEdit && isTransferEntry) && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, cursor: 'pointer' }}>
               <input type="checkbox" checked={esFijo} onChange={e => setEsFijo(e.target.checked)}
                 style={{ width: 16, height: 16, accentColor: 'var(--gg)' }} />
@@ -221,7 +267,7 @@ export default function EntryForm({ onClose }) {
           <button className="btn btn--primary" onClick={handleSave} disabled={saving}>
             {saving
               ? <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
-              : 'Guardar asiento'
+              : isEdit ? 'Guardar cambios' : 'Guardar asiento'
             }
           </button>
         </div>
